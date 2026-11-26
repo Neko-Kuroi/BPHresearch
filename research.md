@@ -3,7 +3,7 @@
 > **⚠️ 調査を始める前の確認(必須)**
 > このガイドは、**教育・学習、または明確な許可を得たインフラの調査**を目的としています。第三者のサーバーへの無許可な能動的スキャンや、過度な負荷をかける行為は避けてください。調査の目的と倫理的な境界線を、常に意識してください。
 
-このガイドの目的は、**防弾ホスティングなどに置かれ、CDN等の裏に隠れた掲示板などのサイトについて、そのオリジン（本来のサーバーと関連インフラ）を、防御的な調査として推測していく**ことです。前提とするツールは `tracker_v1.9.py` で、その全文は末尾の「付録: ツール本体のコード」に収録してあります。この文書だけで、考え方から実行、結論の書き方までが完結します。
+このガイドの目的は、**防弾ホスティングなどに置かれ、CDN等の裏に隠れた掲示板などのサイトについて、そのオリジン（本来のサーバーと関連インフラ）を、防御的な調査として推測していく**ことです。前提とするツールは `tracker_v1.10.py` で、その全文は末尾の「付録: ツール本体のコード」に収録してあります。この文書だけで、考え方から実行、結論の書き方までが完結します。
 
 ## 目次
 
@@ -52,7 +52,7 @@ Webサイトは、DDoS対策として **Cloudflare などのCDN** を使った�
   ```bash
   pip install requests networkx matplotlib
   ```
-  (v1.9でも `pandas` は不要です)
+  (v1.10でも `pandas` は不要です)
 
 ### 2. CIRCL pDNS のアカウント(推奨)
 - **必要なもの**: [CIRCL LU](https://www.circl.lu/services/passive-dns/) のアカウント
@@ -70,7 +70,7 @@ Webサイトは、DDoS対策として **Cloudflare などのCDN** を使った�
 ### 推奨 A: まず受動調査のみ
 
 ```bash
-python tracker_v1.9.py --domain example.com --user YOUR_USER --password YOUR_PASS --no-probe
+python tracker_v1.10.py --domain example.com --user YOUR_USER --password YOUR_PASS --no-probe
 ```
 
 - **`--no-probe` の意味**: 対象サーバーへのHTTP接続をしません。
@@ -81,10 +81,10 @@ python tracker_v1.9.py --domain example.com --user YOUR_USER --password YOUR_PAS
 ### 推奨 B: 自動のHTTP接続を含む調査
 
 ```bash
-python tracker_v1.9.py --domain example.com --user YOUR_USER --password YOUR_PASS --recent-days 90
+python tracker_v1.10.py --domain example.com --user YOUR_USER --password YOUR_PASS --recent-days 90
 ```
 
-- **ツールの動き**: v1.9は、見つかったクラスターから**最大30件ほど**のIPに、自動でHTTP接続を試みます(CDNのIPも含みます)。
+- **ツールの動き**: v1.10は、見つかったクラスターから**最大30件ほど**のIPに、自動でHTTP接続を試みます(CDNのIPも含みます)。
 - **`--recent-days 90` の意味**: 直近90日以内に観測されたIPにだけ接続します。何年も前に別の人へ割り当てられたIPへ、誤ってアクセスするリスクを**減らします**(なくしはしません)。
 - **より限定的に調べたい場合**: ツールの自動接続の代わりに、候補IPだけに1回、手動で接続します。
   ```bash
@@ -96,7 +96,7 @@ python tracker_v1.9.py --domain example.com --user YOUR_USER --password YOUR_PAS
 ### 注意
 
 - **Windows**: コマンドプロンプトやPowerShellでは、行末の `\` が使えません。コマンドは1行で書いてください。
-- **パスワード**: v1.9も環境変数に対応していません。コマンドラインに直接書くと、シェルの履歴に残る点に注意してください。
+- **パスワード**: v1.10も環境変数に対応していません。コマンドラインに直接書くと、シェルの履歴に残る点に注意してください。
 
 ---
 
@@ -158,7 +158,7 @@ python tracker_v1.9.py --domain example.com --user YOUR_USER --password YOUR_PAS
 - **わかること**: 複数の手がかり(非クラウドIPの共有、同じホスティング事業者、独自の名前のCookieの一致)が重なっています。
 - **注意**:
   - スコアは「確率」ではありません。
-  - 閾値は相対的な値です。クラスターが1つしかなければ、閾値はそのクラスター自身のスコア(この例では78.0点)になります。
+  - 閾値は相対的な値です。クラスターが1つしかなければ、閾値はそのクラスター自身のスコアと40の大きい方(この例では78.0点)になります。
   - これは「同一運営者の可能性がある」という**手がかり**であり、確定した証拠ではありません。
   - `Server` のバージョン一致は、同じOSのパッケージ版であれば、誰でも同じになります。
 
@@ -214,7 +214,7 @@ python tracker_v1.9.py --domain example.com --user YOUR_USER --password YOUR_PAS
 ### 2. 受動調査を実行し、出力を残す
 
 ```bash
-python tracker_v1.9.py --domain example.com --user YOUR_USER --password YOUR_PASS --no-probe
+python tracker_v1.10.py --domain example.com --user YOUR_USER --password YOUR_PASS --no-probe
 ```
 
 - 実行したら、`report.json` と `infra_map.png` を、そのまま上書きされる前に日時つきの名前で控えます（例： `report_20261126_1730.json`）。ツールの出力ファイル名は固定で、再実行すると上書きされるためです。
@@ -451,10 +451,10 @@ HTTPS用の証明書を用意します。名前ごとにバラバラの証明書
 | クラウド/CDN IPのみ | +3 | 上と同時には付かない。全IPの `org` がそろった場合のみ |
 | 全IPが同一サブネット（IPv4は /24、IPv6は /48） | +8 | 全IPの `org` がそろった場合のみ |
 | 全IPが同一ASN/Org | +10 | 同上。CDNのIPだけでも付くので、CDNの裏では根拠にしない |
-| Server が完全一致し、バージョンを含む | +15 | 例： `nginx/1.18.0` |
-| Server が完全一致（汎用値） | +3 | 例： バージョンのない値 |
-| 固有Cookie名が一致 | +30 | 汎用Cookie名（次項）は判定から**除外**される |
-| X-Powered-By が完全一致し、バージョンを含む | +8 | バージョンのない一致は 0点 |
+| Server が完全一致し、バージョンを含む | +15 | 異なるIPから得た応答同士の比較の場合のみ。例： `nginx/1.18.0` |
+| Server が完全一致（汎用値） | +3 | 異なるIPから得た応答同士の比較の場合のみ。例： バージョンのない値 |
+| 固有Cookie名が一致 | +30 | 異なるIPから得た応答同士の比較の場合のみ。汎用Cookie名（次項）は判定から**除外**される |
+| X-Powered-By が完全一致し、バージョンを含む | +8 | 異なるIPから得た応答同士の比較の場合のみ。バージョンのない一致は 0点 |
 
 - 汎用Cookie名として除外される例： `PHPSESSID`、`JSESSIONID`、`sessionid`、`csrftoken`、Cloudflare や AWS のロードバランサーが付ける名前、など。フレームワークやCDNの既定値は、別人でも一致するためです。
 - ヘッダーの比較に使えるドメインが2つ未満の場合、ヘッダー由来の加点は一切付きません（理由欄に「比較不可」と残ります）。
@@ -468,6 +468,7 @@ HTTPS用の証明書を用意します。名前ごとにバラバラの証明書
 2. **自動probeの件数**： 最大30なのは（ドメイン, IP）の組の数で、1組ごとに https、失敗すれば http と試すため、接続の試行は最大60回です。同じIPが複数のドメインで重なって選ばれることもあります。1クラスターからは最大6ドメインまでで、ドメインが1つだけのクラスターは probe の対象外です。
 3. **登録ドメインの判定は、内蔵の短いリストによる**： `co.jp`、`co.uk` など一部の2段サフィックスだけを特別扱いします。それ以外の共有サフィックス配下では、登録ドメインの切り分けがずれることがあります。
 4. **probe の対象は「最近のIP」のみ**： pDNSの最終観測時刻が `--recent-days`（既定90日）より古いIPには接続しません。最終観測時刻が取れなかったIP（時刻が0）も、結果として対象外になります。
+5. **ヘッダーの一致は、異なるIP同士の比較でのみ加点される**： Server、Cookie、X-Powered-By の一致による加点は、異なるIPから得た応答同士を比べた場合にだけ付きます。全ドメインの応答が同一IPからしか得られなかったクラスターでは、値が一致しても加点されず、理由欄にその旨が表示されます。同じサーバーが答えた一致を、独立した根拠として二重に数えないための仕様です。
 
 ## 🛠️ 付録C: うまくいかないときの見方
 
@@ -496,13 +497,21 @@ HTTPS用の証明書を用意します。名前ごとにバラバラの証明書
 
 # 付録: ツール本体のコード
 
-以下は `tracker_v1.9.py` の全文です。
+以下は `tracker_v1.10.py` の全文です。
 
 ```python
 #!/usr/bin/env python3
 """
-Multi-Layer Infra Tracker v1.9
+Multi-Layer Infra Tracker v1.10
 pDNS + CT + HTTP Headers + ASN による関連性分析(防御・調査目的)
+
+v1.10 の変更点:
+  - ヘッダー由来の加点は、異なるIPから得たプロファイル同士の比較でのみ行う:
+    各ドメインのプロファイルに「どのIPで得たか」を保持し、Server /
+    X-Powered-By / 固有Cookie の各加点は、出どころのIPが異なるドメインの組の
+    間で一致した場合にだけ付ける。全ドメインの応答が同一IPからしか得られなかった
+    場合はヘッダー加点を行わず、理由にその旨を残す。同じサーバーが答えた一致を
+    独立した根拠として数えないため (IP由来の加点・閾値・その他の挙動は不変)
 
 v1.9 の変更点 (外部レビューで実在を確認した指摘への対応):
   - CNAMEの多段追跡: pDNSのCNAMEチェーンを最大 MAX_CNAME_DEPTH 段までたどり、
@@ -573,7 +582,7 @@ import requests
 # --- 設定 ---
 CIRCL_PDNS_URL = "https://www.circl.lu/pdns/query/"
 CRT_SH_URL = "https://crt.sh/?q={}&output=json"
-USER_AGENT = "InfraTracker/1.9"
+USER_AGENT = "InfraTracker/1.10"
 CT_MAX_ATTEMPTS = 3            # v1.8: crt.sh への最大試行回数
 CT_RETRY_WAITS = (5, 10)       # v1.8: crt.sh 再試行の待機秒 (試行の合間)
 REQUEST_TIMEOUT = 15
@@ -990,37 +999,69 @@ class InfraTracker:
                     reasons.append(f"全IPが同一ASN/Org: {next(iter(orgs))} (+{SCORE_SAME_ORG})")
 
         # --- HTTPヘッダー: 異なるドメイン間で比較 ---
-        by_domain = {}
+        # v1.10: プロファイルは「どのIPで得たか」と一緒に保持し、加点は
+        # 出どころのIPが異なるドメインの組の間での一致に限る。同じIPが答えた
+        # 応答同士の一致は、同じサーバーが答えただけであり、独立した根拠として
+        # 数えない (結論を書くときの「同じIP由来の根拠は二重に数えない」と揃える)。
+        by_domain = {}   # domain -> (応答を得たIP, プロファイル)
         for d in domains:
             for ip in ips:
                 p = self.header_profiles.get(f"{d}@{ip}")
                 if p and p["status"] > 0:
-                    by_domain.setdefault(d, p)
+                    by_domain.setdefault(d, (ip, p))
         if len(by_domain) >= 2:
-            profiles = list(by_domain.values())
+            # ドメイン名順に並べ、組の作り方と値の選び方を決定論的にする
+            ordered = [by_domain[d] for d in sorted(by_domain)]
+            source_ips = {ip for ip, _ in ordered}
+            if len(source_ips) < 2:
+                only_ip = next(iter(source_ips))
+                reasons.append(
+                    f"ヘッダー比較: 全ドメインの応答が同一IP ({only_ip}) からのため、"
+                    "一致は加点しない")
+            else:
+                def cross_ip_value(key, usable):
+                    """key の値のうち、異なる2つ以上のIPから得られているものを返す。
 
-            servers = [p["server"] for p in profiles if p["server"] != "Unknown"]
-            if len(servers) >= 2 and len(set(servers)) == 1:
-                if is_versioned(servers[0]):
-                    score += SCORE_SERVER_VERSIONED
-                    reasons.append(f"Server完全一致(バージョン付き): {servers[0]} (+{SCORE_SERVER_VERSIONED})")
-                else:
-                    score += SCORE_SERVER_GENERIC
-                    reasons.append(f"Server一致(汎用値): {servers[0]} (+{SCORE_SERVER_GENERIC})")
+                    返す値は、ドメイン名順に最初に現れるものに固定する。
+                    """
+                    by_value = {}
+                    for ip, p in ordered:
+                        if usable(p[key]):
+                            by_value.setdefault(p[key], set()).add(ip)
+                    for _, p in ordered:
+                        if usable(p[key]) and len(by_value.get(p[key], ())) >= 2:
+                            return p[key]
+                    return None
 
-            cookie_sets = [set(c for c in p["cookies"] if c.lower() not in GENERIC_COOKIES)
-                           for p in profiles]
-            cookie_sets = [s for s in cookie_sets if s]
-            if len(cookie_sets) >= 2:
-                common = set.intersection(*cookie_sets)
-                if common:
+                server = cross_ip_value("server", lambda v: v != "Unknown")
+                if server is not None:
+                    if is_versioned(server):
+                        score += SCORE_SERVER_VERSIONED
+                        reasons.append(f"Server完全一致(バージョン付き): {server} (+{SCORE_SERVER_VERSIONED})")
+                    else:
+                        score += SCORE_SERVER_GENERIC
+                        reasons.append(f"Server一致(汎用値): {server} (+{SCORE_SERVER_GENERIC})")
+
+                # 固有Cookie: 異なるIPの組ごとに共通名を求め、その和集合で判定する
+                common_cookies = set()
+                for i in range(len(ordered)):
+                    for j in range(i + 1, len(ordered)):
+                        if ordered[i][0] == ordered[j][0]:
+                            continue
+                        a = {c for c in ordered[i][1]["cookies"]
+                             if c.lower() not in GENERIC_COOKIES}
+                        b = {c for c in ordered[j][1]["cookies"]
+                             if c.lower() not in GENERIC_COOKIES}
+                        common_cookies |= a & b
+                if common_cookies:
                     score += SCORE_UNIQUE_COOKIE
-                    reasons.append(f"固有Cookie名が一致: {', '.join(sorted(common))} (+{SCORE_UNIQUE_COOKIE})")
+                    reasons.append(f"固有Cookie名が一致: {', '.join(sorted(common_cookies))} (+{SCORE_UNIQUE_COOKIE})")
 
-            powered = [p["powered"] for p in profiles if p["powered"] != "Unknown"]
-            if len(powered) >= 2 and len(set(powered)) == 1 and is_versioned(powered[0]):
-                score += SCORE_POWERED_VERSIONED
-                reasons.append(f"X-Powered-By完全一致(バージョン付き): {powered[0]} (+{SCORE_POWERED_VERSIONED})")
+                powered = cross_ip_value(
+                    "powered", lambda v: v != "Unknown" and is_versioned(v))
+                if powered is not None:
+                    score += SCORE_POWERED_VERSIONED
+                    reasons.append(f"X-Powered-By完全一致(バージョン付き): {powered} (+{SCORE_POWERED_VERSIONED})")
         else:
             reasons.append(f"ヘッダー比較に使えるドメインが{len(by_domain)}件のみ(比較不可)")
 
@@ -1082,7 +1123,7 @@ class InfraTracker:
 
     def display_results(self, scored):
         print("\n" + "=" * 70)
-        print(" 分析結果 (Relevance Scoring v1.9)")
+        print(" 分析結果 (Relevance Scoring v1.10)")
         print("=" * 70)
         if not scored:
             print("\n  複数ドメインを含むクラスターは見つからなかった。")
@@ -1197,7 +1238,7 @@ class InfraTracker:
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Multi-Layer Infra Tracker v1.9")
+    ap = argparse.ArgumentParser(description="Multi-Layer Infra Tracker v1.10")
     ap.add_argument("--domain", required=True, help="調査対象のドメイン")
     ap.add_argument("--user", help="CIRCL pDNS ユーザー名")
     ap.add_argument("--password", help="CIRCL pDNS パスワード")
