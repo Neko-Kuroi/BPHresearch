@@ -3,7 +3,7 @@
 > **⚠️ 調査を始める前の確認(必須)**
 > このガイドは、**教育・学習、または明確な許可を得たインフラの調査**を目的としています。第三者のサーバーへの無許可な能動的スキャンや、過度な負荷をかける行為は避けてください。調査の目的と倫理的な境界線を、常に意識してください。
 
-このガイドの目的は、**防弾ホスティングなどに置かれ、CDN等の裏に隠れた掲示板などのサイトについて、そのオリジン（本来のサーバーと関連インフラ）を、防御的な調査として推測していく**ことです。前提とするツールは `tracker_v1.8.py` で、その全文は末尾の「付録: ツール本体のコード」に収録してあります。この文書だけで、考え方から実行、結論の書き方までが完結します。
+このガイドの目的は、**防弾ホスティングなどに置かれ、CDN等の裏に隠れた掲示板などのサイトについて、そのオリジン（本来のサーバーと関連インフラ）を、防御的な調査として推測していく**ことです。前提とするツールは `tracker_v1.9.py` で、その全文は末尾の「付録: ツール本体のコード」に収録してあります。この文書だけで、考え方から実行、結論の書き方までが完結します。
 
 ## 目次
 
@@ -52,7 +52,7 @@ Webサイトは、DDoS対策として **Cloudflare などのCDN** を使った�
   ```bash
   pip install requests networkx matplotlib
   ```
-  (v1.8でも `pandas` は不要です)
+  (v1.9でも `pandas` は不要です)
 
 ### 2. CIRCL pDNS のアカウント(推奨)
 - **必要なもの**: [CIRCL LU](https://www.circl.lu/services/passive-dns/) のアカウント
@@ -70,7 +70,7 @@ Webサイトは、DDoS対策として **Cloudflare などのCDN** を使った�
 ### 推奨 A: まず受動調査のみ
 
 ```bash
-python tracker_v1.8.py --domain example.com --user YOUR_USER --password YOUR_PASS --no-probe
+python tracker_v1.9.py --domain example.com --user YOUR_USER --password YOUR_PASS --no-probe
 ```
 
 - **`--no-probe` の意味**: 対象サーバーへのHTTP接続をしません。
@@ -81,10 +81,10 @@ python tracker_v1.8.py --domain example.com --user YOUR_USER --password YOUR_PAS
 ### 推奨 B: 自動のHTTP接続を含む調査
 
 ```bash
-python tracker_v1.8.py --domain example.com --user YOUR_USER --password YOUR_PASS --recent-days 90
+python tracker_v1.9.py --domain example.com --user YOUR_USER --password YOUR_PASS --recent-days 90
 ```
 
-- **ツールの動き**: v1.8は、見つかったクラスターから**最大30件ほど**のIPに、自動でHTTP接続を試みます(CDNのIPも含みます)。
+- **ツールの動き**: v1.9は、見つかったクラスターから**最大30件ほど**のIPに、自動でHTTP接続を試みます(CDNのIPも含みます)。
 - **`--recent-days 90` の意味**: 直近90日以内に観測されたIPにだけ接続します。何年も前に別の人へ割り当てられたIPへ、誤ってアクセスするリスクを**減らします**(なくしはしません)。
 - **より限定的に調べたい場合**: ツールの自動接続の代わりに、候補IPだけに1回、手動で接続します。
   ```bash
@@ -96,7 +96,7 @@ python tracker_v1.8.py --domain example.com --user YOUR_USER --password YOUR_PAS
 ### 注意
 
 - **Windows**: コマンドプロンプトやPowerShellでは、行末の `\` が使えません。コマンドは1行で書いてください。
-- **パスワード**: v1.8も環境変数に対応していません。コマンドラインに直接書くと、シェルの履歴に残る点に注意してください。
+- **パスワード**: v1.9も環境変数に対応していません。コマンドラインに直接書くと、シェルの履歴に残る点に注意してください。
 
 ---
 
@@ -214,7 +214,7 @@ python tracker_v1.8.py --domain example.com --user YOUR_USER --password YOUR_PAS
 ### 2. 受動調査を実行し、出力を残す
 
 ```bash
-python tracker_v1.8.py --domain example.com --user YOUR_USER --password YOUR_PASS --no-probe
+python tracker_v1.9.py --domain example.com --user YOUR_USER --password YOUR_PASS --no-probe
 ```
 
 - 実行したら、`report.json` と `infra_map.png` を、そのまま上書きされる前に日時つきの名前で控えます（例： `report_20261126_1730.json`）。ツールの出力ファイル名は固定で、再実行すると上書きされるためです。
@@ -496,13 +496,26 @@ HTTPS用の証明書を用意します。名前ごとにバラバラの証明書
 
 # 付録: ツール本体のコード
 
-以下は `tracker_v1.8.py` の全文です。
+以下は `tracker_v1.9.py` の全文です。
 
 ```python
 #!/usr/bin/env python3
 """
-Multi-Layer Infra Tracker v1.8
+Multi-Layer Infra Tracker v1.9
 pDNS + CT + HTTP Headers + ASN による関連性分析(防御・調査目的)
+
+v1.9 の変更点 (外部レビューで実在を確認した指摘への対応):
+  - CNAMEの多段追跡: pDNSのCNAMEチェーンを最大 MAX_CNAME_DEPTH 段までたどり、
+    2段以上の先のA/AAAAも取得する。訪問済み集合で循環を防ぎ、上限・循環で
+    打ち切った場合はその旨を表示する
+  - orgs 判定の簡略化: 冗長だった `len(orgs | {None}) == 2` を削除 (挙動不変)
+  - probe のIP選定を時刻順に: 最近の候補IPから ip_last_seen が最も新しいものを
+    選ぶ (同点の場合はIP文字列の昇順で決定論的に選ぶ)
+  - get_pdns の構造整理: 冗長な `status_code == 200` 判定を外した (挙動不変)
+  - 配点の定数化: calculate_relevance_score の加算値を SCORE_* 定数に集約
+    (スコアの値と理由文の文面は v1.8 と同一)
+  - probe_headers の SSL コンテキストに、証明書を検証しないことの意味を
+    注記するコメントを追加 (挙動不変)
 
 v1.8 の変更点 (実地テストで見つかった課題への対応):
   - crt.sh への再試行: HTTPエラー (429・5xx等)、想定外の応答、接続例外の場合は
@@ -560,7 +573,7 @@ import requests
 # --- 設定 ---
 CIRCL_PDNS_URL = "https://www.circl.lu/pdns/query/"
 CRT_SH_URL = "https://crt.sh/?q={}&output=json"
-USER_AGENT = "InfraTracker/1.8"
+USER_AGENT = "InfraTracker/1.9"
 CT_MAX_ATTEMPTS = 3            # v1.8: crt.sh への最大試行回数
 CT_RETRY_WAITS = (5, 10)       # v1.8: crt.sh 再試行の待機秒 (試行の合間)
 REQUEST_TIMEOUT = 15
@@ -568,7 +581,18 @@ PROBE_TIMEOUT = 8
 MAX_CT_DOMAINS = 30
 MAX_HTTP_CHECKS = 30
 MAX_DOMAINS_PER_CLUSTER = 6
+MAX_CNAME_DEPTH = 5            # v1.9: pDNSでたどるCNAMEチェーンの最大段数
 DEFAULT_RECENT_DAYS = 90
+
+# v1.9: 関連性スコアの配点 (calculate_relevance_score で使用。理由文にも同じ値を出す)
+SCORE_NON_CLOUD_SHARED = 15    # 非クラウドIPを共有
+SCORE_CLOUD_ONLY = 3           # クラウド/CDN IPのみ
+SCORE_SAME_SUBNET = 8          # 全IPが同一サブネット
+SCORE_SAME_ORG = 10            # 全IPが同一ASN/Org
+SCORE_SERVER_VERSIONED = 15    # Server完全一致 (バージョン付き)
+SCORE_SERVER_GENERIC = 3       # Server一致 (汎用値)
+SCORE_UNIQUE_COOKIE = 30       # 固有Cookie名が一致
+SCORE_POWERED_VERSIONED = 8    # X-Powered-By完全一致 (バージョン付き)
 
 PUBLIC_SUFFIX_2 = {
     "co.uk", "org.uk", "ac.uk", "gov.uk", "net.uk",
@@ -679,15 +703,14 @@ class InfraTracker:
             if res.status_code != 200:
                 print(f"  ⚠️  pDNSが想定外の応答 (indicator={indicator}, status={res.status_code})")
                 return []
-            if res.status_code == 200:
-                for line in res.text.splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        records.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        continue
+            for line in res.text.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
         except requests.RequestException as e:
             print(f"  ⚠️  pDNS接続エラー ({indicator}): {e}")
         return [r for r in records if r.get("rrtype") in ("A", "AAAA", "CNAME")]
@@ -717,7 +740,11 @@ class InfraTracker:
                 self.ip_first_seen[ip] = min(cur, first)
 
     def resolve_domain_to_ips(self, domain: str) -> dict:
-        """ip -> last_seen(epoch)。公開IPのみ返す。CNAMEは1段階追跡。
+        """ip -> last_seen(epoch)。公開IPのみ返す。
+
+        CNAMEはチェーンを最大 MAX_CNAME_DEPTH 段までたどる (v1.9で多段化)。
+        訪問済みの名前は再訪しないため、CNAMEの循環でも無限ループにならない。
+        上限・循環で打ち切った場合はその旨を表示する。
 
         v1.7: あわせて time_first から ip_first_seen を保持する。
         pDNSで公開A/AAAAが1つも得られなかった場合は、理由によらず
@@ -758,10 +785,25 @@ class InfraTracker:
             return cnames
 
         if self.pdns_available:
-            cnames = absorb(self.get_pdns(domain))
-            for cname in sorted(cnames):
-                if cname != domain:
-                    absorb(self.get_pdns(cname))
+            # v1.9: CNAMEチェーンを多段にたどる。visited で循環を防ぐ。
+            visited = {domain}
+            frontier = absorb(self.get_pdns(domain))
+            depth = 0
+            while frontier:
+                pending = sorted(frontier - visited)
+                if not pending:
+                    print(f"  ⚠️  {domain}: CNAMEが循環しているため追跡を打ち切り")
+                    break
+                if depth >= MAX_CNAME_DEPTH:
+                    print(f"  ⚠️  {domain}: CNAMEの追跡が上限{MAX_CNAME_DEPTH}段に"
+                          "達したため打ち切り")
+                    break
+                depth += 1
+                next_names = set()
+                for cname in pending:
+                    visited.add(cname)
+                    next_names |= absorb(self.get_pdns(cname))
+                frontier = next_names
         if not found:
             for ip, ts in self.live_resolve(domain).items():
                 if self.is_public_ip(ip):
@@ -853,6 +895,7 @@ class InfraTracker:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE  # 調査用途: 自己署名証明書も観測対象
+        # 証明書を検証しないため、観測結果は「そのIPが名乗る姿」であって本人確認ではない
 
         for proto in ("https", "http"):
             conn = None
@@ -931,20 +974,20 @@ class InfraTracker:
             non_cloud = [ip for ip, d in known.items() if not d["_is_cloud"]]
             cloud = [ip for ip, d in known.items() if d["_is_cloud"]]
             if non_cloud:
-                score += 15
-                reasons.append(f"非クラウドIPを共有: {len(non_cloud)}個 (+15)")
+                score += SCORE_NON_CLOUD_SHARED
+                reasons.append(f"非クラウドIPを共有: {len(non_cloud)}個 (+{SCORE_NON_CLOUD_SHARED})")
             elif cloud:
-                score += 3
-                reasons.append(f"クラウド/CDN IPのみ(ノイズ注意) (+3)")
+                score += SCORE_CLOUD_ONLY
+                reasons.append(f"クラウド/CDN IPのみ(ノイズ注意) (+{SCORE_CLOUD_ONLY})")
 
             if len(known) >= 2:
                 if len({self.subnet_of(ip) for ip in known}) == 1:
-                    score += 8
-                    reasons.append("全IPが同一サブネット (+8)")
+                    score += SCORE_SAME_SUBNET
+                    reasons.append(f"全IPが同一サブネット (+{SCORE_SAME_SUBNET})")
                 orgs = {d.get("org") for d in known.values() if d.get("org")}
-                if len(orgs) == 1 and len(orgs | {None}) == 2:
-                    score += 10
-                    reasons.append(f"全IPが同一ASN/Org: {next(iter(orgs))} (+10)")
+                if len(orgs) == 1:
+                    score += SCORE_SAME_ORG
+                    reasons.append(f"全IPが同一ASN/Org: {next(iter(orgs))} (+{SCORE_SAME_ORG})")
 
         # --- HTTPヘッダー: 異なるドメイン間で比較 ---
         by_domain = {}
@@ -959,11 +1002,11 @@ class InfraTracker:
             servers = [p["server"] for p in profiles if p["server"] != "Unknown"]
             if len(servers) >= 2 and len(set(servers)) == 1:
                 if is_versioned(servers[0]):
-                    score += 15
-                    reasons.append(f"Server完全一致(バージョン付き): {servers[0]} (+15)")
+                    score += SCORE_SERVER_VERSIONED
+                    reasons.append(f"Server完全一致(バージョン付き): {servers[0]} (+{SCORE_SERVER_VERSIONED})")
                 else:
-                    score += 3
-                    reasons.append(f"Server一致(汎用値): {servers[0]} (+3)")
+                    score += SCORE_SERVER_GENERIC
+                    reasons.append(f"Server一致(汎用値): {servers[0]} (+{SCORE_SERVER_GENERIC})")
 
             cookie_sets = [set(c for c in p["cookies"] if c.lower() not in GENERIC_COOKIES)
                            for p in profiles]
@@ -971,13 +1014,13 @@ class InfraTracker:
             if len(cookie_sets) >= 2:
                 common = set.intersection(*cookie_sets)
                 if common:
-                    score += 30
-                    reasons.append(f"固有Cookie名が一致: {', '.join(sorted(common))} (+30)")
+                    score += SCORE_UNIQUE_COOKIE
+                    reasons.append(f"固有Cookie名が一致: {', '.join(sorted(common))} (+{SCORE_UNIQUE_COOKIE})")
 
             powered = [p["powered"] for p in profiles if p["powered"] != "Unknown"]
             if len(powered) >= 2 and len(set(powered)) == 1 and is_versioned(powered[0]):
-                score += 8
-                reasons.append(f"X-Powered-By完全一致(バージョン付き): {powered[0]} (+8)")
+                score += SCORE_POWERED_VERSIONED
+                reasons.append(f"X-Powered-By完全一致(バージョン付き): {powered[0]} (+{SCORE_POWERED_VERSIONED})")
         else:
             reasons.append(f"ヘッダー比較に使えるドメインが{len(by_domain)}件のみ(比較不可)")
 
@@ -1039,7 +1082,7 @@ class InfraTracker:
 
     def display_results(self, scored):
         print("\n" + "=" * 70)
-        print(" 分析結果 (Relevance Scoring v1.8)")
+        print(" 分析結果 (Relevance Scoring v1.9)")
         print("=" * 70)
         if not scored:
             print("\n  複数ドメインを含むクラスターは見つからなかった。")
@@ -1082,9 +1125,11 @@ class InfraTracker:
             for d in domains:
                 if picked >= MAX_DOMAINS_PER_CLUSTER:
                     break
-                cand = sorted(ip for ip in self.graph.neighbors(d) if self.is_recent(ip))
+                cand = [ip for ip in self.graph.neighbors(d) if self.is_recent(ip)]
                 if cand:
-                    tasks.append((d, cand[0]))
+                    # v1.9: 最も新しく観測されたIPを選ぶ (同点ならIP文字列の昇順で決定論的に)
+                    best = min(cand, key=lambda ip: (-self.ip_last_seen.get(ip, 0), ip))
+                    tasks.append((d, best))
                     picked += 1
         return tasks[:MAX_HTTP_CHECKS]
 
@@ -1152,7 +1197,7 @@ class InfraTracker:
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Multi-Layer Infra Tracker v1.8")
+    ap = argparse.ArgumentParser(description="Multi-Layer Infra Tracker v1.9")
     ap.add_argument("--domain", required=True, help="調査対象のドメイン")
     ap.add_argument("--user", help="CIRCL pDNS ユーザー名")
     ap.add_argument("--password", help="CIRCL pDNS パスワード")
