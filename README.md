@@ -1,4 +1,3 @@
-# BPHresearch
 # 🌸 Infrastructure Investigation Guide — Complete Edition (Multi-Layer Infra Tracker)
 
 > **⚠️ Before you begin (required reading)**
@@ -247,15 +246,15 @@ In practice, the following fields are the ones mainly used.
 
 ## 🔍 Step 9: Narrowing down the candidates (building a candidate table)
 
-Build a table of candidate IPs, and look at each one with the following yardsticks. **Drop candidates that do not meet a yardstick early.**
+Build a table of candidate IPs, and look at each one with the following criteria. **Drop candidates that do not meet a criterion early.**
 
-### Yardstick 1: Timing
+### Criterion 1: Timing
 
 - Does the IP appear in the period **before** the CDN was introduced? An IP that passive DNS history shows was in use before the switch to CDN IPs stays as an origin candidate.
 - Conversely, an IP that appeared only once, years ago, and looks to have been used for something else ever since is likely to have been reassigned, so drop it.
 - You can check "when it first appeared" in `ip_first_seen` in `report.json` (derived from `time_first` in passive DNS). Look at it alongside `ip_last_seen` (the time it was last observed), as the span "from when to when was it in use." However, an IP whose `ip_first_seen` is 0 has an unknown first appearance. Also, for an IP obtained by current DNS resolution, first seen = last seen = the time of resolution, so it is not a first appearance in the historical sense.
 
-### Yardstick 2: Names that are not proxied
+### Criterion 2: Names that are not proxied
 
 A subdomain that does not go through the CDN may point directly at the origin.
 
@@ -269,7 +268,7 @@ dig +short TXT example.com
 - Check whether the MX destination, or the `ip4:` ranges written in TXT (SPF) records, include a candidate IP or one near it.
 - This is information the tool does not collect. Fill it in manually.
 
-### Yardstick 3: Certificates (look at them one at a time)
+### Criterion 3: Certificates (look at them one at a time)
 
 The tool **keeps certificates per certificate**, and `certificates` in `report.json` contains, for each certificate, its issuer (`issuer_name`) and the set of names on that certificate (`names`) (it also returns the union of names used for candidate gathering). Make your judgments in this per-certificate unit. For each certificate, look at the following two things.
 
@@ -278,10 +277,10 @@ The tool **keeps certificates per certificate**, and `certificates` in `report.j
 
 A certificate where both hold is a strong clue. As a final check, do not skip reopening the certificate on the crt.sh site itself.
 
-### Yardstick 4: Network
+### Criterion 4: Network
 
 - Is the candidate IP's ASN/Org not a CDN provider?
-- However, "same ASN," "same subnet," and "non-cloud" all trace back to the same IP information. In the counting in Step 10 below, count them together as **one family**.
+- However, "same ASN," "same subnet," and "non-cloud" all trace back to the same IP information. In the counting in Step 10 below, count them together as **one category**.
 
 An example candidate table (a fictional example; the IPs are from the range reserved for documentation):
 
@@ -289,13 +288,13 @@ An example candidate table (a fictional example; the IPs are from the range rese
 |:--- |:--- |:--- |:--- |:--- |:--- |
 | 203.0.113.10 | Appeared continuously before the CDN was introduced | Same as the MX destination | Shared with another domain (issued by another CA) | Non-cloud | Keep |
 | 203.0.113.99 | Only once, 5 years ago | None | None | Non-cloud | Drop (suspected reassignment) |
-| A CDN IP | Current | — | — | Cloud | Drop (a front-side IP) |
+| A CDN IP | Current | — | — | Cloud | Drop (a public-facing IP) |
 
 ---
 
 ## 🌐 Step 10: Verifying candidates one at a time
 
-Once candidates remain, the principle is to verify **once per candidate**. Instead of the tool's automatic probing (Recommended B), connect manually just once, and compare with the front-side response (via the CDN).
+Once candidates remain, the principle is to verify **once per candidate**. Instead of the tool's automatic probing (Recommended B), connect manually just once, and compare with the public-facing response (via the CDN).
 
 ```bash
 curl -sk -o /dev/null -D - --resolve example.com:443:203.0.113.10 https://example.com/
@@ -314,24 +313,24 @@ Incidentally, Recommended B in the main text (the tool's automatic probing) trie
 
 ### How to count the grounds
 
-Count the grounds not by points, but by **the family they come from**. There are four families.
+Count the grounds not by points, but by **the category they come from**. There are four categories.
 
 1. **DNS history** (the shape of passive DNS, including timing)
 2. **Certificates** (confirmed per certificate)
 3. **HTTP habits** (matches in Server, cookie names, and the like)
-4. **Network** (ASN, subnet, and whether it is non-cloud — all together, this one family)
+4. **Network** (ASN, subnet, and whether it is non-cloud — all together, this one category)
 
-Not double-counting items that come from the same IP information across families is the key to avoiding overestimation.
+Not double-counting items that come from the same IP information across categories is the key to avoiding overestimation.
 
 ### Confidence levels
 
 | Wording | Guideline |
 |:--- |:--- |
 | Confirmed | Do not use it. Observations from outside the infrastructure alone never justify writing "confirmed" |
-| Likely | Three or more independent families line up, and a false-positive explanation cannot compete |
-| Possible | One or two families. It remains a candidate, but you cannot state it flatly |
+| Likely | Three or more independent categories line up, and a false-positive explanation cannot compete |
+| Possible | One or two categories. It remains a candidate, but you cannot state it flatly |
 | Candidate only | Only weak matches, such as timing or network alone |
-| Unknown | No candidate remained, or only front-side information could be obtained |
+| Unknown | No candidate remained, or only public-facing information could be obtained |
 
 ### A template for the conclusion
 
@@ -349,17 +348,17 @@ Not double-counting items that come from the same IP information across families
 観測日時： 2026-11-26
 ```
 
-(This template is the format the investigation notes use. In English: Target / Conclusion — the candidate believed to be the origin is 203.0.113.10, confidence "possible" / Grounds by family — DNS history: this IP was in continuous use in the period before the CDN was introduced; Certificate: it appeared, together with a different registered domain, on one certificate issued by another CA / Possibility of a false positive — on shared hosting, another operator's site could take the same shape; a mid-period change of IP assignment cannot be completely ruled out / What is not known — whether the same server is still used as the origin cannot be confirmed from outside / Date and time of observation: 2026-11-26.)
+(This template is the format the investigation notes use. In English: Target / Conclusion — the candidate believed to be the origin is 203.0.113.10, confidence "possible" / Grounds by category — DNS history: this IP was in continuous use in the period before the CDN was introduced; Certificate: it appeared, together with a different registered domain, on one certificate issued by another CA / Possibility of a false positive — on shared hosting, another operator's site could take the same shape; a mid-period change of IP assignment cannot be completely ruled out / What is not known — whether the same server is still used as the origin cannot be confirmed from outside / Date and time of observation: 2026-11-26.)
 
 ### A worked example (a fictional example)
 
 This is an example set up as: a bulletin board `example.com` behind a CDN was investigated. The IPs are from the range reserved for documentation, and this is not actual output.
 
-1. In the passive investigation, the cluster was low relevance at 13 points. The reasons were "cloud/CDN IPs only (+3)," "all IPs in the same ASN/Org (+10)," and "0 domains available for header comparison," so all that could be told was that the front side is a CDN.
+1. In the passive investigation, the cluster was low relevance at 13 points. The reasons were "cloud/CDN IPs only (+3)," "all IPs in the same ASN/Org (+10)," and "0 domains available for header comparison," so all that could be told was that the public-facing side is a CDN.
 2. Building a candidate table, one IP remained in the passive DNS history that appears only in the period before the CDN was introduced. The MX destination also pointed at the same IP.
 3. Looking at the certificates one at a time, a certificate from another CA, issued in that IP's period, had a different registered domain on it together with this one.
-4. In the manual verification connection to the candidate, the status and Server matched the front side, but the cookie names could not be confirmed.
-5. The conclusion was written using the template, as "possible." The families were two — DNS history and certificates — and since that does not reach three, the judgment was not to write "likely."
+4. In the manual verification connection to the candidate, the status and Server matched the public-facing side, but the cookie names could not be confirmed.
+5. The conclusion was written using the template, as "possible." The categories were two — DNS history and certificates — and since that does not reach three, the judgment was not to write "likely."
 
 As in this example, **ending with "cannot say for sure" is the ordinary way for an investigation to end**. Writing, as-is, that you cannot say for sure is how a conclusion is written.
 
@@ -376,9 +375,9 @@ This chapter organizes, from the defender's / operator's point of view, what the
 You cannot state, from outside, what a specific site's operator is thinking. That said, operators who place the real server behind a CDN are generally understood to have reasons such as the following.
 
 - **Protecting the real server from DDoS and attacks**: If the real server's IP becomes known, it can be attacked directly, bypassing the CDN. Not exposing the IP is itself the first line of defense.
-- **Having the CDN take the brunt of attacks**: The front side's responses are handled by the CDN. Large volumes of access and attacks are absorbed by the CDN first.
+- **Having the CDN take the brunt of attacks**: The public-facing side's responses are handled by the CDN. Large volumes of access and attacks are absorbed by the CDN first.
 - **Not showing server migrations or provider changes to the outside**: Even if the real server moves, all that changes is the destination inside the CDN. The appearance from outside (the CDN's IPs) does not change, so the timing of a migration, and where it went, are harder to infer.
-- **Spreading out the target of complaints and takedown requests**: Inquiries and requests arrive first at the front side (the CDN provider, or the domain registration side). They do not arrive directly at the place where the real server sits.
+- **Spreading out the target of complaints and takedown requests**: Inquiries and requests arrive first at the public-facing side (the CDN provider, or the domain registration side). They do not arrive directly at the place where the real server sits.
 - **Making the operator's identity, and the hosting provider they use, harder to infer**: If the real server's IP becomes known, the owner of that IP (the provider), and other sites on the same IP or the same network, can lead closer to who is running the site. Hiding the IP closes that entrance, too.
 
 Seen from the investigating side, all of these work as "reasons no clues are given out." Put the other way: clues emerge mostly when the operator has **carelessly broken** one of these protections.
@@ -417,13 +416,13 @@ On the real server's side, set it to "pass connections from the CDN only, and re
 
 **Step 8: Do not run a mail server. Do not create separate names for administration or testing**
 Decide not to run mail (or, if you do, put it somewhere else), and do not create administrative names such as `direct` or `cpanel`, or subdomains for testing, either. Delete any you did create.
-- Seen from the investigating side: There is no opening for IPs to leak from MX or SPF, and no names that are not proxied, so Yardstick 2 (Step 9) cannot be used.
+- Seen from the investigating side: There is no opening for IPs to leak from MX or SPF, and no names that are not proxied, so Criterion 2 (Step 9) cannot be used.
 
 **Step 9: Going live, and operation**
 Announce the site, go live, and operate it normally from then on. Program updates are done by logging into the server directly. When the server is migrated, all that changes is the destination inside Cloudflare.
-- Seen from the investigating side: The appearance from outside barely changes from the first day of going live. Even after a migration, the front side is the same, so it cannot be observed as a change.
+- Seen from the investigating side: The appearance from outside barely changes from the first day of going live. Even after a migration, the public-facing side is the same, so it cannot be observed as a change.
 
-To sum up, there are only two keys. **"Being behind the CDN from the first day of going live,"** and **"not creating a single name or service that bypasses the back side."** The rest is no different from running an ordinary site.
+To sum up, there are only two keys. **"Being behind the CDN from the first day of going live,"** and **"not creating a single name or service that reaches the origin behind the CDN directly."** The rest is no different from running an ordinary site.
 
 ## 3. A side-by-side table of leak openings
 
@@ -435,14 +434,14 @@ Here are Step 1's layer table (the investigating side's clues) and the operator'
 | In CT logs, a different registered domain on the same certificate | Consolidate into a wildcard certificate. Do not take separate certificates per purpose |
 | IPs written in MX / SPF | Do not host mail. If you do, use a different server from the real server |
 | Subdomains that are not proxied (for administration, testing, etc.) | Do not create such names. If you created one, delete it |
-| HTTP habits (Server header, cookie names) | The front side is answered by the CDN, so the real server's headers do not reach the front |
+| HTTP habits (Server header, cookie names) | The public-facing side is answered by the CDN, so the real server's headers do not reach the public-facing side |
 | Verification by connecting directly to a candidate IP | The real server refuses connections from anywhere other than Cloudflare |
 
 The investigating side's clues correspond to the places where the right-hand side's closures have been broken. Conversely, if the right-hand side is fully upheld, the left-hand side all comes up empty.
 
 ## 4. When "we don't know" is the correct conclusion
 
-The clues in infrastructure investigation, this tool included, are mostly a mechanism for **picking up things that leaked carelessly**. A pre-introduction history, mail records, the IP a separate name points to, a combination on a certificate — each of these is born only when the operator's side has exposed something to the front.
+The clues in infrastructure investigation, this tool included, are mostly a mechanism for **picking up things that leaked carelessly**. A pre-introduction history, mail records, the IP a separate name points to, a combination on a certificate — each of these is born only when the operator's side has exposed something on the public-facing side.
 
 So if there are no leaks, no candidates come out. That is neither a failure of the tool nor a shortcoming of the procedure. It is **one legitimate investigation result: "no clues within the passive scope."** In terms of Step 11's confidence levels, it corresponds to "unknown" — and being able to write "unknown" correctly is a far more valuable conclusion than lining up candidates with no grounds.
 
@@ -486,9 +485,9 @@ To avoid misjudging, the tool's own limits are collected here. What follows are 
 | Passive DNS is in use, yet no candidate IPs come out | If passive DNS yields no public A/AAAA records, the tool falls back to current DNS resolution regardless of the reason. If nothing comes out even then, it means no public IP could be resolved in current DNS either | Look at whether names were retrieved from crt.sh. If they were not, record this as a run where the passive information was thin |
 | "非公開/予約IPのため除外した解決結果がN件あります" appears (in English: "There are N resolution results excluded as non-public / reserved IPs") / the IP count becomes 0 | The resolver in your execution environment may be returning fake IPs (such as 198.18.x), and every resolution result was excluded. The number excluded is shown as a warning on the spot, and also remains in `dropped_non_global` in `report.json` | Treat that run's tool results as insufficient material, check the actual A/AAAA records separately via DoH (DNS over HTTPS) or the like, and use them as material for the candidate table |
 | "crt.sh が 502。再試行します" appears (in English: "crt.sh returned 502. Retrying") / "CTログが取得できませんでした" appears (in English: "Could not retrieve CT logs") | crt.sh is busy, or temporarily returning errors. The tool automatically retries up to 3 times, with pauses in between | If a retry succeeds, proceed as-is. If it fails even after 3 tries, record that run as one without CT, and rerun after waiting a while |
-| An ipinfo rate-limit message appears | Some IPs have become impossible to determine | Treat that run's network-family grounds as weak, and lower the confidence of the conclusion |
+| An ipinfo rate-limit message appears | Some IPs have become impossible to determine | Treat that run's grounds in the network category as weak, and lower the confidence of the conclusion |
 | Clusters across multiple domains do not form | The target is connected only through shared CDN IPs, or candidate names could not be resolved | Do not judge by score; move on to Step 9's candidate table (timing, bare names, certificates) |
-| All probe results have status 0 | Neither https nor http could connect. An old IP, filtering, or the wrong candidate | Return to the candidate table and check the timing yardstick. Do not keep trying with different connection methods |
+| All probe results have status 0 | Neither https nor http could connect. An old IP, filtering, or the wrong candidate | Return to the candidate table and check the timing criterion. Do not keep trying with different connection methods |
 | The map becomes a large star shape | The typical shape when many names are connected to a shared CDN IP | Do not judge by appearance; return to the reasons in `report.json` |
 
 ---
