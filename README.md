@@ -3,7 +3,7 @@
 > **⚠️ Before you begin (required reading)**
 > This guide is intended for **education and learning, or for investigating infrastructure with explicit permission**. Do not perform unauthorized active scanning of third-party servers, and do not place excessive load on them. Always keep the purpose of your investigation and its ethical boundaries in mind.
 
-The purpose of this guide is to **infer, as a defensive investigation, the origin (the real server and related infrastructure) of sites such as bulletin boards that are placed on bulletproof hosting or similar services and hidden behind a CDN or the like**. The tool it assumes is `tracker_v1.10.py`, whose full source code is included at the end of this document, in "Appendix: Full Source Code of the Tool." This document alone covers everything from the underlying ideas, through running the tool, to how to write up your conclusions.
+The purpose of this guide is to **infer, as a defensive investigation, the origin (the real server and related infrastructure) of sites such as bulletin boards that are placed on bulletproof hosting or similar services and hidden behind a CDN or the like**. The tool it assumes is `tracker_v1.11.py`, whose full source code is included at the end of this document, in "Appendix: Full Source Code of the Tool." This document alone covers everything from the underlying ideas, through running the tool, to how to write up your conclusions.
 
 ## Contents
 
@@ -52,7 +52,7 @@ This tool combines several viewpoints (layers) to reduce "coincidental matches (
   ```bash
   pip install requests networkx matplotlib
   ```
-  (`pandas` is not needed, in v1.10 either)
+  (`pandas` is not needed, in v1.11 either)
 
 ### 2. A CIRCL passive DNS account (recommended)
 - **What you need**: An account with [CIRCL LU](https://www.circl.lu/services/passive-dns/)
@@ -70,7 +70,7 @@ The basic principle is to **prefer passive investigation, and keep active invest
 ### Recommended A: Passive investigation only, first
 
 ```bash
-python tracker_v1.10.py --domain example.com --user YOUR_USER --password YOUR_PASS --no-probe
+python tracker_v1.11.py --domain example.com --user YOUR_USER --password YOUR_PASS --no-probe
 ```
 
 - **What `--no-probe` means**: The tool makes no HTTP connections to the target server.
@@ -81,10 +81,10 @@ python tracker_v1.10.py --domain example.com --user YOUR_USER --password YOUR_PA
 ### Recommended B: Investigation including automatic HTTP connections
 
 ```bash
-python tracker_v1.10.py --domain example.com --user YOUR_USER --password YOUR_PASS --recent-days 90
+python tracker_v1.11.py --domain example.com --user YOUR_USER --password YOUR_PASS --recent-days 90
 ```
 
-- **What the tool does**: v1.10 automatically tries HTTP connections to **up to about 30** of the IPs in the clusters it finds (including CDN IPs).
+- **What the tool does**: v1.11 automatically tries HTTP connections to **up to about 30** of the IPs in the clusters it finds (including CDN IPs).
 - **What `--recent-days 90` means**: It connects only to IPs observed within the last 90 days. This **reduces** (but does not eliminate) the risk of accidentally accessing an IP that was reassigned to someone else years ago.
 - **If you want to investigate more narrowly**: Instead of the tool's automatic connections, connect manually, just once, to a candidate IP only.
   ```bash
@@ -96,7 +96,7 @@ python tracker_v1.10.py --domain example.com --user YOUR_USER --password YOUR_PA
 ### Notes
 
 - **Windows**: In Command Prompt and PowerShell, a trailing `\` cannot be used for line continuation. Write each command on a single line.
-- **Passwords**: v1.10 does not support environment variables either. Be aware that if you write the password directly on the command line, it will remain in your shell history.
+- **Passwords**: The user name and password can also be specified with the environment variables `CIRCL_USER` / `CIRCL_PASSWORD` (command-line arguments take precedence). Writing the password directly on the command line leaves it in your shell history, so specifying it via environment variables is recommended.
 
 ---
 
@@ -220,10 +220,10 @@ Before starting an investigation, write the following five things in your notes.
 ### 2. Run the passive investigation and keep the output
 
 ```bash
-python tracker_v1.10.py --domain example.com --user YOUR_USER --password YOUR_PASS --no-probe
+python tracker_v1.11.py --domain example.com --user YOUR_USER --password YOUR_PASS --no-probe
 ```
 
-- Once you have run it, save copies of `report.json` and `infra_map.png` under dated names (for example, `report_20261126_1730.json`) before they are overwritten. The tool's output file names are fixed, and rerunning it overwrites them.
+- Once you have run it, the output report (`report_YYYYMMDD_HHMMSS.json`) and map (`infra_map_YYYYMMDD_HHMMSS.png`) serve as that run's copies. The output file names contain the date and time of the run, so rerunning the tool does not overwrite the previous run's files.
 - Do not throw away clusters that show as low relevance on screen, either. The reasons for a low-relevance cluster appear as only one line on screen, and remain only in `reasons` in `report.json`. In practice, clues pointing "behind the CDN" sometimes remain precisely among the low-relevance results.
 
 ### 3. What to pick out of report.json
@@ -505,13 +505,25 @@ The tool's job ends at surfacing candidates. From there, an investigation procee
 
 # Appendix: Full Source Code of the Tool
 
-The full text of `tracker_v1.10.py` follows. The code is reproduced as-is; comments in the code are in Japanese.
+The full text of `tracker_v1.11.py` follows. The code is reproduced as-is; comments in the code are in Japanese.
 
 ```python
 #!/usr/bin/env python3
 """
-Multi-Layer Infra Tracker v1.10
+Multi-Layer Infra Tracker v1.11
 pDNS + CT + HTTP Headers + ASN による関連性分析(防御・調査目的)
+
+v1.11 の変更点 (外部レビューで残っていた小さい問題5件への対応):
+  - crt.sh の応答の形への耐性: JSONが配列でない (辞書など) 場合は「想定外の応答」
+    として再試行の対象にし、例外で落ちない。リスト内の辞書でない要素も飛ばす
+  - CTの名前の形の確認: ホスト名の形をしていない名前 (メールアドレス風、空白や
+    "_" を含むもの等) は、候補にも証明書の名前一覧にも入れない
+  - pDNS の 404・429 の扱い: 404 は「記録なし」として警告せず空を返す。
+    429 は間隔を空けて最大 PDNS_MAX_ATTEMPTS 回まで再試行する
+  - 出力ファイル名に日時を入れる: 既定名は report_YYYYMMDD_HHMMSS.json と
+    infra_map_YYYYMMDD_HHMMSS.png (実行開始時刻ベース、2ファイルで同じ日時文字列)
+  - 環境変数対応: CIRCL のユーザー名・パスワードを環境変数 CIRCL_USER /
+    CIRCL_PASSWORD からも読めるようにした (コマンドライン引数が優先)
 
 v1.10 の変更点:
   - ヘッダー由来の加点は、異なるIPから得たプロファイル同士の比較でのみ行う:
@@ -574,6 +586,8 @@ import argparse
 import http.client
 import ipaddress
 import json
+import os
+import re
 import socket
 import ssl
 import threading
@@ -590,9 +604,11 @@ import requests
 # --- 設定 ---
 CIRCL_PDNS_URL = "https://www.circl.lu/pdns/query/"
 CRT_SH_URL = "https://crt.sh/?q={}&output=json"
-USER_AGENT = "InfraTracker/1.10"
+USER_AGENT = "InfraTracker/1.11"
 CT_MAX_ATTEMPTS = 3            # v1.8: crt.sh への最大試行回数
 CT_RETRY_WAITS = (5, 10)       # v1.8: crt.sh 再試行の待機秒 (試行の合間)
+PDNS_MAX_ATTEMPTS = 3          # v1.11: pDNS の 429 への最大試行回数
+PDNS_RETRY_WAITS = (5, 10)     # v1.11: pDNS 再試行の待機秒 (試行の合間)
 REQUEST_TIMEOUT = 15
 PROBE_TIMEOUT = 8
 MAX_CT_DOMAINS = 30
@@ -610,6 +626,11 @@ SCORE_SERVER_VERSIONED = 15    # Server完全一致 (バージョン付き)
 SCORE_SERVER_GENERIC = 3       # Server一致 (汎用値)
 SCORE_UNIQUE_COOKIE = 30       # 固有Cookie名が一致
 SCORE_POWERED_VERSIONED = 8    # X-Powered-By完全一致 (バージョン付き)
+
+# v1.11: CTから集めた名前がホスト名の形かどうかを見るための単純な判定。
+# ラベルは英数字とハイフン (先頭・末尾は英数字)、少なくとも1つのドットを含むこと。
+HOSTNAME_RE = re.compile(
+    r"^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 
 PUBLIC_SUFFIX_2 = {
     "co.uk", "org.uk", "ac.uk", "gov.uk", "net.uk",
@@ -640,6 +661,12 @@ def is_versioned(value: str) -> bool:
     return "/" in value and any(c.isdigit() for c in value.split("/", 1)[1])
 
 
+def resolve_circl_credentials(user=None, password=None):
+    """CIRCL認証情報の解決 (v1.11): コマンドライン引数を優先し、無ければ環境変数を見る。"""
+    return (user or os.environ.get("CIRCL_USER"),
+            password or os.environ.get("CIRCL_PASSWORD"))
+
+
 class PinnedHTTPSConnection(http.client.HTTPSConnection):
     """指定IPへ接続しつつ、SNIにはドメイン名を載せる。"""
 
@@ -667,6 +694,8 @@ class InfraTracker:
         self.target = target_domain.lower().strip()
         self.recent_days = recent_days
         self.probe = probe
+        # v1.11: 出力ファイル名に使う実行開始時刻 (report と map で同じ文字列を使う)
+        self.run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.graph = nx.Graph()
 
         # 認証はpDNS専用セッションにのみ付与する
@@ -708,14 +737,31 @@ class InfraTracker:
         if not self.pdns_available:
             return []
         records = []
-        try:
-            res = self.pdns_session.get(f"{CIRCL_PDNS_URL}{indicator}", timeout=REQUEST_TIMEOUT)
+        # v1.11: 404 は「記録なし」として警告せず空を返し、429 は間隔を空けて
+        # 最大 PDNS_MAX_ATTEMPTS 回まで再試行する。401/403 と他の非200は従来どおり。
+        for attempt in range(1, PDNS_MAX_ATTEMPTS + 1):
+            try:
+                res = self.pdns_session.get(f"{CIRCL_PDNS_URL}{indicator}", timeout=REQUEST_TIMEOUT)
+            except requests.RequestException as e:
+                print(f"  ⚠️  pDNS接続エラー ({indicator}): {e}")
+                return []
             if res.status_code in (401, 403):
                 with self._lock:
                     self.pdns_available = False
                     if not self._warned_pdns:
                         self._warned_pdns = True
                         print("  ⚠️  CIRCL認証エラー: pDNSを無効化し、現在のDNS解決へ切り替える")
+                return []
+            if res.status_code == 404:
+                return []
+            if res.status_code == 429:
+                if attempt < PDNS_MAX_ATTEMPTS:
+                    print(f"  ⚠️  pDNS が 429 (レート制限)。再試行します ({attempt}/{PDNS_MAX_ATTEMPTS})")
+                    wait = PDNS_RETRY_WAITS[min(attempt - 1, len(PDNS_RETRY_WAITS) - 1)]
+                    if wait:
+                        time.sleep(wait)
+                    continue
+                print(f"  ⚠️  pDNSがレート制限のため取得できませんでした (indicator={indicator}、{PDNS_MAX_ATTEMPTS}回試行)")
                 return []
             if res.status_code != 200:
                 print(f"  ⚠️  pDNSが想定外の応答 (indicator={indicator}, status={res.status_code})")
@@ -728,8 +774,7 @@ class InfraTracker:
                     records.append(json.loads(line))
                 except json.JSONDecodeError:
                     continue
-        except requests.RequestException as e:
-            print(f"  ⚠️  pDNS接続エラー ({indicator}): {e}")
+            break
         return [r for r in records if r.get("rrtype") in ("A", "AAAA", "CNAME")]
 
     def live_resolve(self, domain: str) -> dict:
@@ -854,8 +899,12 @@ class InfraTracker:
             try:
                 res = self.plain_session.get(CRT_SH_URL.format(f"%.{reg}"), timeout=30)
                 if res.status_code == 200 and "json" in res.headers.get("Content-Type", ""):
-                    entries = res.json()  # JSONでなければ ValueError → 再試行対象
-                    reason = "想定外の応答"
+                    data = res.json()  # JSONでなければ ValueError → 再試行対象
+                    if isinstance(data, list):
+                        entries = data
+                    else:
+                        # v1.11: 配列でないJSON (辞書など) も想定外の応答として再試行する
+                        reason = "想定外の応答 (JSONが配列ではない)"
                 elif res.status_code == 200:
                     reason = "想定外の応答 (JSONではない)"
                 else:
@@ -869,11 +918,14 @@ class InfraTracker:
                 names = set()
                 certificates = []
                 for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue  # v1.11: 辞書でない要素は飛ばす (落ちないように)
                     cert_names = set()
                     for name in entry.get("name_value", "").split("\n"):
                         name = name.strip().lower()
                         if (name and not name.startswith("*")
-                                and not any(n in name for n in CT_NOISE_SUBSTRINGS)):
+                                and not any(n in name for n in CT_NOISE_SUBSTRINGS)
+                                and HOSTNAME_RE.match(name)):  # v1.11: ホスト名の形だけを通す
                             cert_names.add(name)
                     names |= cert_names
                     # v1.7: 証明書(エントリ)単位でも保持する。1エントリにつき1 dict。
@@ -1076,7 +1128,10 @@ class InfraTracker:
         return {"score": score, "reasons": reasons}
 
     # ---------- 出力 ----------
-    def draw_graph(self, filename="infra_map.png"):
+    def draw_graph(self, filename=None):
+        if filename is None:
+            # v1.11: 既定名は実行開始時刻入りにし、再実行で上書きされないようにする
+            filename = f"infra_map_{self.run_stamp}.png"
         plt.figure(figsize=(16, 12))
         pos = nx.spring_layout(self.graph, k=0.9, iterations=60, seed=42)
         nodes = list(self.graph.nodes())
@@ -1089,7 +1144,10 @@ class InfraTracker:
         plt.close()
         print(f"  ✅ '{filename}' を保存")
 
-    def save_report(self, scored, filename="report.json"):
+    def save_report(self, scored, filename=None):
+        if filename is None:
+            # v1.11: 既定名は実行開始時刻入りにし、再実行で上書きされないようにする
+            filename = f"report_{self.run_stamp}.json"
         report = {
             "target": self.target,
             "timestamp": datetime.now().isoformat(),
@@ -1131,7 +1189,7 @@ class InfraTracker:
 
     def display_results(self, scored):
         print("\n" + "=" * 70)
-        print(" 分析結果 (Relevance Scoring v1.10)")
+        print(" 分析結果 (Relevance Scoring v1.11)")
         print("=" * 70)
         if not scored:
             print("\n  複数ドメインを含むクラスターは見つからなかった。")
@@ -1246,15 +1304,17 @@ class InfraTracker:
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Multi-Layer Infra Tracker v1.10")
+    ap = argparse.ArgumentParser(description="Multi-Layer Infra Tracker v1.11")
     ap.add_argument("--domain", required=True, help="調査対象のドメイン")
-    ap.add_argument("--user", help="CIRCL pDNS ユーザー名")
-    ap.add_argument("--password", help="CIRCL pDNS パスワード")
+    ap.add_argument("--user", help="CIRCL pDNS ユーザー名 (環境変数 CIRCL_USER でも指定可)")
+    ap.add_argument("--password", help="CIRCL pDNS パスワード (環境変数 CIRCL_PASSWORD でも指定可)")
     ap.add_argument("--recent-days", type=int, default=DEFAULT_RECENT_DAYS,
                     help="能動接続の対象とするIPの最終観測からの日数 (既定: 90)")
     ap.add_argument("--no-probe", action="store_true", help="HTTP接続を行わない(受動情報のみ)")
     args = ap.parse_args()
 
-    InfraTracker(args.domain, args.user, args.password,
+    # v1.11: 引数が無ければ環境変数 CIRCL_USER / CIRCL_PASSWORD を使う (引数が優先)
+    circl_user, circl_password = resolve_circl_credentials(args.user, args.password)
+    InfraTracker(args.domain, circl_user, circl_password,
                  recent_days=args.recent_days, probe=not args.no_probe).run_analysis()
 ```
